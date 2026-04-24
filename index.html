@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Flash Tap</title>
+    <style>
+        /* 黒一色の没入デザイン */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #444;
+            font-family: -apple-system, system-ui, sans-serif;
+            font-size: 14px;
+            letter-spacing: 0.2em;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="canvas"></canvas>
+    <div id="hint">TAP TO START</div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const hint = document.getElementById('hint');
+        
+        let width, height;
+        let ripples = [];
+        let hasStarted = false;
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.scale(dpr, dpr);
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        class Ripple {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 0;
+                this.opacity = 1.0;
+                // 鮮やかなHSLカラー（彩度80%, 輝度60%）
+                this.hue = Math.floor(Math.random() * 360);
+                this.velocity = Math.max(width, height) * 0.025;
+            }
+
+            update() {
+                this.radius += this.velocity;
+                this.opacity -= 0.025;
+                this.velocity *= 0.97;
+            }
+
+            draw() {
+                if (this.opacity <= 0) return;
+
+                // 光の輪
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = `hsla(${this.hue}, 80%, 60%, ${this.opacity})`;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+
+                // 中心の発光
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius * 0.5, 0, Math.PI * 2);
+                ctx.fillStyle = `hsla(${this.hue}, 80%, 60%, ${this.opacity * 0.2})`;
+                ctx.fill();
+            }
+        }
+
+        function draw() {
+            // 残像エフェクト
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(0, 0, width, height);
+
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                ripples[i].update();
+                ripples[i].draw();
+                if (ripples[i].opacity <= 0) ripples.splice(i, 1);
+            }
+            requestAnimationFrame(draw);
+        }
+
+        function handleTap(e) {
+            if (!hasStarted) {
+                hint.style.opacity = '0';
+                hasStarted = true;
+            }
+
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const y = e.touches ? e.touches[0].clientY : e.clientY;
+
+            ripples.push(new Ripple(x, y));
+
+            // 衝撃のフラッシュ
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        // iPhone向け高速レスポンス設定
+        window.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleTap(e);
+        }, { passive: false });
+
+        window.addEventListener('mousedown', (e) => {
+            if (!('ontouchstart' in window)) handleTap(e);
+        });
+
+        draw();
+    </script>
+</body>
+</html>
