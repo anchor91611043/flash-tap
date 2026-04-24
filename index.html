@@ -98,42 +98,47 @@
                 this.opacity = 1.0;
                 this.coreOpacity = 1.0;
                 this.hue = Math.floor(Math.random() * 360);
-                this.velocity = Math.max(width, height) * 0.045;
-                this.baseCoreSize = 48; // ユーザー指定の48をベースに
+                
+                // 初速を一つ前（綺麗だったとき）に近いバランスへ
+                this.velocity = Math.max(width, height) * 0.048;
+                this.baseCoreSize = 48;
                 this.coreSize = this.baseCoreSize;
             }
             update() {
+                // 外側のライン: 
+                // 減衰率を 0.97 に戻し、キレを出す。
                 this.radius += this.velocity;
-                this.opacity -= 0.025;
+                this.velocity *= 0.97;
                 
-                // 消える速度
+                // 透明度も 0.015 に戻し、だらだら残らないようにする
+                this.opacity -= 0.015;
+                
+                // 中心コア: ここをさらに速く消すことで「外側のラインだけが飛んでいく」印象を強める
                 this.coreOpacity -= 0.2; 
                 
-                // 【スケールアップ演出】
-                // 不透明度が下がるほどサイズを大きくする（破裂感の演出）
                 if (this.coreOpacity > 0) {
-                    this.coreSize = this.baseCoreSize * (1 + (1 - this.coreOpacity) * 0.5);
+                    this.coreSize = this.baseCoreSize * (1 + (1 - this.coreOpacity) * 0.4);
                 }
-
-                this.velocity *= 0.92;
             }
             draw() {
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 
+                // 1. 広がる外側の星型ライン（余韻担当）
                 if (this.opacity > 0) {
                     ctx.beginPath();
                     this.drawStarPath(this.radius);
                     ctx.strokeStyle = `hsla(${this.hue}, 90%, 65%, ${this.opacity})`;
-                    ctx.lineWidth = 5;
+                    ctx.lineWidth = 3; // 少し細くして繊細に
                     ctx.lineJoin = 'round';
                     ctx.stroke();
                 }
 
+                // 2. 中心コア（インパクト担当）
                 if (this.coreOpacity > 0) {
                     ctx.beginPath();
                     this.drawStarPath(this.coreSize);
-                    ctx.fillStyle = `hsla(${this.hue}, 90%, 85%, ${this.coreOpacity})`;
+                    ctx.fillStyle = `hsla(${this.hue}, 90%, 65%, ${this.coreOpacity})`;
                     ctx.fill();
                 }
 
