@@ -7,7 +7,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Flash Tap</title>
     <style>
-        /* 黒一色の没入デザイン */
         body, html {
             margin: 0;
             padding: 0;
@@ -26,33 +25,58 @@
             height: 100%;
         }
 
+        /* モード表示用のラベル */
+        #mode-label {
+            position: absolute;
+            top: env(safe-area-inset-top, 20px);
+            right: 20px;
+            color: #555;
+            font-family: sans-serif;
+            font-size: 12px;
+            letter-spacing: 0.1em;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
         #hint {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: #444;
+            color: #333;
             font-family: -apple-system, system-ui, sans-serif;
             font-size: 14px;
             letter-spacing: 0.2em;
             pointer-events: none;
-            transition: opacity 0.5s;
+            transition: opacity 1.5s;
+            text-align: center;
         }
     </style>
 </head>
 <body>
 
     <canvas id="canvas"></canvas>
-    <div id="hint">TAP TO START</div>
+    <div id="mode-label">MODE: RIPPLE</div>
+    <div id="hint">SCREEN TAP TO LIGHT<br><span style="font-size: 10px; letter-spacing: 0;">(Flick to change mode)</span></div>
 
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const hint = document.getElementById('hint');
+        const modeLabel = document.getElementById('mode-label');
         
         let width, height;
-        let ripples = [];
+        let elements = [];
         let hasStarted = false;
+        let currentMode = 0;
+
+        // フリック判定用の変数
+        let touchStartX = 0;
+        let touchStartY = 0;
+        const FLICK_THRESHOLD = 50; // フリックとみなす最小移動距離
+
+        const modes = ['RIPPLE', 'SQUARE'];
 
         function resize() {
             width = window.innerWidth;
@@ -68,76 +92,123 @@
 
         class Ripple {
             constructor(x, y) {
-                this.x = x;
-                this.y = y;
+                this.x = x; this.y = y;
                 this.radius = 0;
                 this.opacity = 1.0;
-                // 鮮やかなHSLカラー（彩度80%, 輝度60%）
                 this.hue = Math.floor(Math.random() * 360);
-                this.velocity = Math.max(width, height) * 0.025;
+                this.velocity = Math.max(width, height) * 0.03;
             }
-
             update() {
                 this.radius += this.velocity;
-                this.opacity -= 0.025;
-                this.velocity *= 0.97;
+                this.opacity -= 0.02;
+                this.velocity *= 0.96;
             }
-
             draw() {
-                if (this.opacity <= 0) return;
-
-                // 光の輪
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.strokeStyle = `hsla(${this.hue}, 80%, 60%, ${this.opacity})`;
-                ctx.lineWidth = 4;
+                ctx.strokeStyle = `hsla(${this.hue}, 90%, 65%, ${this.opacity})`;
+                ctx.lineWidth = 5;
                 ctx.stroke();
+            }
+        }
 
-                // 中心の発光
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius * 0.5, 0, Math.PI * 2);
-                ctx.fillStyle = `hsla(${this.hue}, 80%, 60%, ${this.opacity * 0.2})`;
-                ctx.fill();
+        class Square {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.size = 0;
+                this.opacity = 1.0;
+                this.hue = Math.floor(Math.random() * 360);
+                this.rotation = Math.random() * Math.PI;
+                this.velocity = Math.max(width, height) * 0.04;
+            }
+            update() {
+                this.size += this.velocity;
+                this.opacity -= 0.03;
+                this.velocity *= 0.95;
+                this.rotation += 0.02;
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.strokeStyle = `hsla(${this.hue}, 90%, 65%, ${this.opacity})`;
+                ctx.lineWidth = 4;
+                ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
+                ctx.restore();
             }
         }
 
         function draw() {
-            // 残像エフェクト
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
             ctx.fillRect(0, 0, width, height);
 
-            for (let i = ripples.length - 1; i >= 0; i--) {
-                ripples[i].update();
-                ripples[i].draw();
-                if (ripples[i].opacity <= 0) ripples.splice(i, 1);
+            for (let i = elements.length - 1; i >= 0; i--) {
+                elements[i].update();
+                elements[i].draw();
+                if (elements[i].opacity <= 0) elements.splice(i, 1);
             }
             requestAnimationFrame(draw);
         }
 
-        function handleTap(e) {
-            if (!hasStarted) {
-                hint.style.opacity = '0';
-                hasStarted = true;
-            }
-
-            const x = e.touches ? e.touches[0].clientX : e.clientX;
-            const y = e.touches ? e.touches[0].clientY : e.clientY;
-
-            ripples.push(new Ripple(x, y));
-
-            // 衝撃のフラッシュ
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-            ctx.fillRect(0, 0, width, height);
+        function showModeLabel() {
+            modeLabel.innerText = `MODE: ${modes[currentMode]}`;
+            modeLabel.style.opacity = '1';
+            setTimeout(() => { modeLabel.style.opacity = '0'; }, 1500);
         }
 
-        // iPhone向け高速レスポンス設定
+        // 開始時
         window.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            handleTap(e);
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
         }, { passive: false });
 
+        // 終了時（ここでタップかフリックかを判定）
+        window.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            const deltaX = touch.clientX - touchStartX;
+            const deltaY = touch.clientY - touchStartY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+            if (distance > FLICK_THRESHOLD) {
+                // フリック：モード切り替え
+                currentMode = (currentMode + 1) % modes.length;
+                showModeLabel();
+                elements = []; // 前のエフェクトをクリア
+            } else {
+                // タップ：エフェクト発生
+                if (!hasStarted) {
+                    hint.style.opacity = '0';
+                    hasStarted = true;
+                }
+
+                // 指を離した位置にエフェクトを出す（touchstartの位置でもOK）
+                const x = touch.clientX;
+                const y = touch.clientY;
+
+                if (modes[currentMode] === 'RIPPLE') {
+                    elements.push(new Ripple(x, y));
+                } else if (modes[currentMode] === 'SQUARE') {
+                    elements.push(new Square(x, y));
+                }
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+                ctx.fillRect(0, 0, width, height);
+            }
+        }, { passive: false });
+
+        // PCでの動作確認用
         window.addEventListener('mousedown', (e) => {
-            if (!('ontouchstart' in window)) handleTap(e);
+            if ('ontouchstart' in window) return;
+            if (!hasStarted) { hint.style.opacity = '0'; hasStarted = true; }
+            const x = e.clientX;
+            const y = e.clientY;
+            if (modes[currentMode] === 'RIPPLE') elements.push(new Ripple(x, y));
+            else if (modes[currentMode] === 'SQUARE') elements.push(new Square(x, y));
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.fillRect(0, 0, width, height);
         });
 
         draw();
