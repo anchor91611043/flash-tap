@@ -57,7 +57,6 @@
 <body>
 
     <canvas id="canvas"></canvas>
-    <!-- 初期モードをSTARに変更 -->
     <div id="mode-label">MODE: STAR</div>
     <div id="hint">SCREEN TAP TO LIGHT<br><span style="font-size: 10px; letter-spacing: 0;">(Flick to change mode)</span></div>
 
@@ -70,14 +69,13 @@
         let width, height;
         let elements = [];
         let hasStarted = false;
-        let currentMode = 0; // 初期モード (STAR)
+        let currentMode = 0; 
 
         let touchStartX = 0;
         let touchStartY = 0;
         const FLICK_THRESHOLD = 50;
         let labelTimeout = null;
 
-        // 新しいモード STAR を先頭に追加
         const modes = ['STAR', 'RIPPLE', 'SQUARE', 'PARTICLE', 'GRAVITY'];
 
         function resize() {
@@ -92,53 +90,67 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // --- 0. STAR (四芒星: 波紋の線なし発光バージョン) ---
+        // --- 0. STAR ---
         class Star {
             constructor(x, y) {
                 this.x = x; this.y = y;
                 this.radius = 0;
                 this.opacity = 1.0;
+                this.coreOpacity = 1.0;
                 this.hue = Math.floor(Math.random() * 360);
-                this.velocity = Math.max(width, height) * 0.035;
+                this.velocity = Math.max(width, height) * 0.045;
+                this.baseCoreSize = 48; // ユーザー指定の48をベースに
+                this.coreSize = this.baseCoreSize;
             }
             update() {
                 this.radius += this.velocity;
-                this.opacity -= 0.025; // 波紋より少し早く消える
-                this.velocity *= 0.95;
+                this.opacity -= 0.025;
+                
+                // 消える速度
+                this.coreOpacity -= 0.2; 
+                
+                // 【スケールアップ演出】
+                // 不透明度が下がるほどサイズを大きくする（破裂感の演出）
+                if (this.coreOpacity > 0) {
+                    this.coreSize = this.baseCoreSize * (1 + (1 - this.coreOpacity) * 0.5);
+                }
+
+                this.velocity *= 0.92;
             }
             draw() {
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 
-                // 四芒星 (Four Pointed Star) のパスを描画
-                ctx.beginPath();
-                ctx.moveTo(this.radius, 0);
-                ctx.quadraticCurveTo(0, 0, 0, this.radius);
-                ctx.quadraticCurveTo(0, 0, -this.radius, 0);
-                ctx.quadraticCurveTo(0, 0, 0, -this.radius);
-                ctx.quadraticCurveTo(0, 0, this.radius, 0);
-                ctx.closePath();
-                
-                // 外枠（ストローク）は描かず、中身（フィル）だけを発光させる
-                ctx.fillStyle = `hsla(${this.hue}, 90%, 65%, ${this.opacity})`;
-                ctx.fill();
+                if (this.opacity > 0) {
+                    ctx.beginPath();
+                    this.drawStarPath(this.radius);
+                    ctx.strokeStyle = `hsla(${this.hue}, 90%, 65%, ${this.opacity})`;
+                    ctx.lineWidth = 5;
+                    ctx.lineJoin = 'round';
+                    ctx.stroke();
+                }
 
-                // 中心部の強い光を重ねる
-                ctx.beginPath();
-                ctx.moveTo(this.radius * 0.4, 0);
-                ctx.quadraticCurveTo(0, 0, 0, this.radius * 0.4);
-                ctx.quadraticCurveTo(0, 0, -this.radius * 0.4, 0);
-                ctx.quadraticCurveTo(0, 0, 0, -this.radius * 0.4);
-                ctx.quadraticCurveTo(0, 0, this.radius * 0.4, 0);
-                ctx.closePath();
-                ctx.fillStyle = `hsla(${this.hue}, 90%, 85%, ${this.opacity * 0.5})`;
-                ctx.fill();
+                if (this.coreOpacity > 0) {
+                    ctx.beginPath();
+                    this.drawStarPath(this.coreSize);
+                    ctx.fillStyle = `hsla(${this.hue}, 90%, 85%, ${this.coreOpacity})`;
+                    ctx.fill();
+                }
 
                 ctx.restore();
             }
+
+            drawStarPath(r) {
+                ctx.moveTo(r, 0);
+                ctx.quadraticCurveTo(0, 0, 0, r);
+                ctx.quadraticCurveTo(0, 0, -r, 0);
+                ctx.quadraticCurveTo(0, 0, 0, -r);
+                ctx.quadraticCurveTo(0, 0, r, 0);
+                ctx.closePath();
+            }
         }
 
-        // --- 1. RIPPLE (従来の波紋) ---
+        // --- 1. RIPPLE ---
         class Ripple {
             constructor(x, y) {
                 this.x = x; this.y = y;
@@ -161,7 +173,7 @@
             }
         }
 
-        // --- 2. SQUARE (回転四角形) ---
+        // --- 2. SQUARE ---
         class Square {
             constructor(x, y) {
                 this.x = x; this.y = y;
@@ -188,7 +200,7 @@
             }
         }
 
-        // --- 3. PARTICLE (火花) ---
+        // --- 3. PARTICLE ---
         class Particle {
             constructor(x, y, hue) {
                 this.x = x; this.y = y;
@@ -213,7 +225,7 @@
             }
         }
 
-        // --- 4. GRAVITY (重力粒子) ---
+        // --- 4. GRAVITY ---
         class GravityDot {
             constructor(x, y, hue) {
                 this.x = x; this.y = y;
@@ -238,7 +250,6 @@
             }
         }
 
-        // 描画ループ
         function draw() {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
             ctx.fillRect(0, 0, width, height);
@@ -246,24 +257,21 @@
             for (let i = elements.length - 1; i >= 0; i--) {
                 elements[i].update();
                 elements[i].draw();
-                // 完全に透明になったら配列から削除
-                if (elements[i].opacity <= 0) elements.splice(i, 1);
+                const isDead = elements[i].opacity <= 0 && (elements[i].coreOpacity === undefined || elements[i].coreOpacity <= 0);
+                if (isDead) {
+                    elements.splice(i, 1);
+                }
             }
             requestAnimationFrame(draw);
         }
 
-        // ラベル表示（連続フリック時のバグ解消）
         function showModeLabel() {
             modeLabel.innerText = `MODE: ${modes[currentMode]}`;
             modeLabel.style.opacity = '1';
-            
             if (labelTimeout) clearTimeout(labelTimeout);
-            labelTimeout = setTimeout(() => {
-                modeLabel.style.opacity = '0';
-            }, 1500);
+            labelTimeout = setTimeout(() => { modeLabel.style.opacity = '0'; }, 1500);
         }
 
-        // タップ処理の振り分け
         function handleTrigger(x, y) {
             if (!hasStarted) {
                 hint.style.opacity = '0';
@@ -271,7 +279,7 @@
             }
 
             const mode = modes[currentMode];
-            const hue = Math.floor(Math.random() * 360); // 共通の色生成
+            const hue = Math.floor(Math.random() * 360);
 
             if (mode === 'STAR') {
                 elements.push(new Star(x, y));
@@ -285,12 +293,10 @@
                 for (let i = 0; i < 8; i++) elements.push(new GravityDot(x, y, hue));
             }
 
-            // マイルドなフラッシュ効果
             ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
             ctx.fillRect(0, 0, width, height);
         }
 
-        // イベントリスナー
         window.addEventListener('touchstart', (e) => {
             e.preventDefault();
             const touch = e.touches[0];
@@ -306,23 +312,19 @@
             const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
             if (distance > FLICK_THRESHOLD) {
-                // フリック判定
                 currentMode = (currentMode + 1) % modes.length;
                 showModeLabel();
-                elements = []; // 画面クリア
+                elements = [];
             } else {
-                // タップ判定
                 handleTrigger(touch.clientX, touch.clientY);
             }
         }, { passive: false });
 
-        // PC動作確認用
         window.addEventListener('mousedown', (e) => {
             if ('ontouchstart' in window) return;
             handleTrigger(e.clientX, e.clientY);
         });
 
-        // アニメーション開始
         draw();
     </script>
 </body>
